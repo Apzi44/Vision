@@ -25,6 +25,20 @@ class VistaPrincipal(ctk.CTk):
         self.btn_subir = ctk.CTkButton(self.sidebar, text="Subir Imagen")
         self.btn_subir.pack(pady=10, padx=20)
 
+        self.btn_cargar_dataset = ctk.CTkButton(self.sidebar, text="Cargar Dataset (K-Means)", fg_color="#E67E22", hover_color="#D35400") # Le pongo un color naranja para diferenciarlo
+        self.btn_cargar_dataset.pack(pady=10, padx=20)
+        ctk.CTkLabel(self.sidebar, text="Valor de K:", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 0))
+        
+        self.entry_k = ctk.CTkEntry(self.sidebar, justify="center", width=80)
+        self.entry_k.insert(0, "3") # Por defecto sugerimos 3 (cielo, vegetación, agua)
+        self.entry_k.pack(pady=5)
+
+        self.btn_entrenar_kmeans = ctk.CTkButton(self.sidebar, text="Entrenar K-Means", fg_color="#27AE60", hover_color="#1E8449")
+        self.btn_entrenar_kmeans.pack(pady=10, padx=20)
+
+        self.btn_segmentar_kmeans = ctk.CTkButton(self.sidebar, text="Segmentar Imagen Actual", fg_color="#8E44AD", hover_color="#732D91")
+        self.btn_segmentar_kmeans.pack(pady=10, padx=20)
+
         self.btn_franjas = ctk.CTkButton(self.sidebar, text="Marcar Area", state="disabled")
         self.btn_franjas.pack(pady=10, padx=20)
 
@@ -104,36 +118,39 @@ class VistaPrincipal(ctk.CTk):
     def mostrar_error(self, titulo, mensaje):
         messagebox.showerror(titulo, mensaje)
 
-    def actualizar_canvas_imagen_principal(self, pil_image):
-        # 1. Regresamos al formato clásico compatible con tk.Canvas
-        self.img_tk = ImageTk.PhotoImage(pil_image)
-        
-        # 2. Limpiamos todos los puntos, marcas y la foto vieja del Canvas
-        self.canvas.delete("all")
-        
-        # 3. Dibujamos la nueva imagen segmentada
-        self.canvas.create_image(self.offset, self.offset, image=self.img_tk, anchor="nw", tags="imagen_segmentada")
-        
-        # 4. Guardamos la referencia para que Python no la borre de la memoria
-        self.canvas.image = self.img_tk
-
     def dibujar_linea_division(self, w_x, w_y, bias, w_img, h_img):
-        # 1. Borramos cualquier línea vieja si el usuario entrena varias veces
+        
         self.canvas.delete("linea_division")
         
-        # 2. Despejamos Y de la ecuación: w_x*X + w_y*Y + bias = 0
+        
         if w_y == 0: 
-            return # Evitamos división entre cero (línea totalmente vertical)
+            return 
             
-        # Calculamos dónde toca el borde izquierdo de la foto (X = 0)
+        
         y0 = -bias / w_y
         
-        # Calculamos dónde toca el borde derecho de la foto (X = Ancho de imagen)
+        
         y1 = -(w_x * w_img + bias) / w_y
         
-        # 3. Le sumamos el offset de tu diseño para que cuadre exacto en la foto
+        
         px1, py1 = 0 + self.offset, y0 + self.offset
         px2, py2 = w_img + self.offset, y1 + self.offset
         
-        # 4. Dibujamos la línea (Verde brillante y gruesa) sobre la imagen
+        
         self.canvas.create_line(px1, py1, px2, py2, fill="#00FF00", width=4, tags="linea_division")
+
+    def pedir_directorio(self):
+        return ctk.filedialog.askdirectory(title="Selecciona el Dataset")
+    
+    def mostrar_resultado_kmeans(self, img_pil_segmentada):
+        ventana_res = ctk.CTkToplevel(self)
+        ventana_res.title("Resultado de Validación K-Means")
+        # Hacemos la ventana un poco más grande que la imagen
+        ventana_res.geometry(f"{img_pil_segmentada.width + 40}x{img_pil_segmentada.height + 40}")
+        ventana_res.grab_set()
+        
+        # Convertimos la imagen para que se vea nítida
+        img_tk = ctk.CTkImage(light_image=img_pil_segmentada, dark_image=img_pil_segmentada, size=(img_pil_segmentada.width, img_pil_segmentada.height))
+        
+        lbl_img = ctk.CTkLabel(ventana_res, image=img_tk, text="")
+        lbl_img.pack(pady=20)

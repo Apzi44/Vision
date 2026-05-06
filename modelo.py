@@ -1,4 +1,8 @@
 import numpy as np
+import os
+from PIL import Image
+from sklearn.cluster import KMeans
+
 class ClasificadorModelo:
     def __init__(self):
         self.clases_rgb = []
@@ -7,6 +11,62 @@ class ClasificadorModelo:
         self.covarianzas = []
         self.num_clases = 0
         self.num_ele = 0
+
+    def cargar_dataset_masivo(self, ruta_carpeta, num_descriptores=1000):
+        archivos_validos = [".jpg", ".jpeg", ".png"]
+        mega_dataset = []
+        imagenes_leidas = 0
+        
+        # 1. Explorar todos los archivos en la carpeta que le pasemos
+        for archivo in os.listdir(ruta_carpeta):
+            ext = os.path.splitext(archivo)[1].lower()
+            
+            if ext in archivos_validos:
+                ruta_completa = os.path.join(ruta_carpeta, archivo)
+                
+                try:
+                    # 2. Abrir la imagen y asegurar que esté en formato RGB
+                    img = Image.open(ruta_completa).convert('RGB')
+                    img_np = np.array(img)
+                    
+                    # 3. Aplanar la imagen: pasar de 3D (Alto, Ancho, RGB) a una lista 2D (Total Pixeles, RGB)
+                    pixeles_planos = img_np.reshape(-1, 3)
+                    total_pixeles = pixeles_planos.shape[0]
+                    
+                    # 4. Elegir puntos al azar (Si la imagen es muy chiquita, tomamos lo que se pueda)
+                    puntos_a_extraer = min(num_descriptores, total_pixeles)
+                    
+                    # Generamos índices aleatorios sin repetición
+                    indices_aleatorios = np.random.choice(total_pixeles, puntos_a_extraer, replace=False)
+                    
+                    # 5. Extraemos solo los píxeles (descriptores) de esos índices
+                    descriptores = pixeles_planos[indices_aleatorios]
+                    
+                    # 6. Los guardamos en la lista gigante
+                    mega_dataset.append(descriptores)
+                    imagenes_leidas += 1
+                    
+                except Exception as e:
+                    print(f"Error al leer la imagen {archivo}: {e}")
+                    
+        # 7. Unir todas las mini-listas en un solo mega arreglo de Numpy
+        if len(mega_dataset) > 0:
+            # vstack apila los arreglos uno encima de otro
+            dataset_final = np.vstack(mega_dataset)
+            return True, dataset_final, imagenes_leidas
+        else:
+            return False, "No se encontraron imágenes válidas en la carpeta.", 0
+
+    def entrenar_kmeans(self, dataset, k):
+        try:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            kmeans.fit(dataset)
+            self.modelo_kmeans = kmeans
+            self.centroides = kmeans.cluster_centers_
+
+            return True, self.centroides
+        except Exception as e:
+            return False, f"Error de entrenamiento: {e}"
 
     def cargar_datos(self, lista_rgb, lista_xy, num_ele):
         self.clases_rgb = lista_rgb
@@ -166,64 +226,7 @@ class ClasificadorModelo:
         suma_filas[suma_filas == 0] = 1 
         eficiencia_por_clase = (np.diag(matriz_confusion) / suma_filas) * 100
 
-    def entrenar_perceptron(self, w_iniciales, bias_inicial, r, max_epocas=5000):
-        if self.num_clases != 2:
-            return False, "El Perceptrón básico solo soporta 2 clases"
-            
-        c1_rgb = self.clases_rgb[0].T 
-        c2_rgb = self.clases_rgb[1].T 
-        
-        pesos = np.array(w_iniciales, dtype=float)
-        bias = float(bias_inicial)
-        tasa = float(r)
-        
-        X = np.vstack((c1_rgb, c2_rgb))
-        Y_esperada = np.concatenate((np.zeros(len(c1_rgb)), np.ones(len(c2_rgb))))
-        
-        for epoca in range(max_epocas):
-            errores_epoca = 0
-            
-            for i in range(len(X)):
-                pixel_rgb = X[i]
-                clase_real = Y_esperada[i]
-                
-                f_sal = np.dot(pixel_rgb, pesos) + bias
-                
-                if clase_real == 0 and f_sal >= 0:
-                    pesos = pesos - (tasa * pixel_rgb)
-                    bias = bias - tasa
-                    errores_epoca += 1
-                elif clase_real == 1 and f_sal <= 0:
-                    pesos = pesos + (tasa * pixel_rgb)
-                    bias = bias + tasa
-                    errores_epoca += 1
-                    
-            if errores_epoca == 0:
-                pesos_limpios = [round(float(w), 2) for w in pesos]
-                bias_limpio = round(float(bias), 2)
-                return True, (pesos_limpios, bias_limpio, epoca + 1)
-
-        return False, "El Perceptrón no convergió (Las clases se mezclan mucho o faltan épocas)"   
-
-
-    def segmentar_imagen(self, imagen_pil, pesos, bias):
-        img_np = np.array(imagen_pil, dtype = float)
-        f_sal = np.dot(img_np, pesos) + bias
-
-        h,w, _ = img_np.shape
-        img_segmentada  = np.zeros((h,w,3), dtype = np.uint8)
-
-        img_segmentada[f_sal > 0] = [0,255,0]
-        img_segmentada[f_sal <= 0] = [128,0,128]
-
-        return img_segmentada
-
-    # -------------------------------------------------------------
-    # NUEVO MÉTODO: PERCEPTRÓN ESPACIAL (Coordenadas XY)
-    # -------------------------------------------------------------
-    # -------------------------------------------------------------
-    # NUEVO MÉTODO: PERCEPTRÓN ESPACIAL (Coordenadas XY)
-    # -------------------------------------------------------------
+    
     def entrenar_perceptron_xy(self, w_iniciales_xy, bias_inicial, r, max_epocas=5000):
         if self.num_clases != 2:
             return False, "El Perceptrón solo soporta 2 clases."
@@ -236,16 +239,14 @@ class ClasificadorModelo:
         tasa = float(r)
         
         X_datos = np.vstack((c1_xy, c2_xy))
-        Y_esperada = np.concatenate((np.zeros(len(c1_xy)), np.ones(len(c2_xy))))
+        Y_esperada = np.concatenate((np.zeros(len(c1_xy)), np.ones(len(c2_xy))))        
         
-        # --- EL TRUCO PROFESIONAL: NORMALIZACIÓN ---
-        # Dividimos entre 1000 para que los números grandes (como X=850) no hagan "girar" la recta a lo loco
         X_datos_norm = X_datos / 1000.0 
         
         for epoca in range(max_epocas):
             errores_epoca = 0
             
-            # Entrenamos usando los datos "encogidos"
+            
             for i in range(len(X_datos_norm)):
                 pixel_coords = X_datos_norm[i] 
                 clase_real = Y_esperada[i]
@@ -262,10 +263,39 @@ class ClasificadorModelo:
                     errores_epoca += 1
                     
             if errores_epoca == 0:
-                # Regresamos los pesos a su escala original dividiéndolos entre 1000
+                
                 pesos_limpios = [round(float(w)/1000.0, 6) for w in pesos]
                 bias_limpio = round(float(bias), 6)
                 return True, (pesos_limpios, bias_limpio, epoca + 1)
                 
         return False, "El Perceptrón no convergió. Intenta cuadros sin empalme." 
                 
+    def segmentar_con_kmeans(self, imagen_pil):
+        # 1. Asegurarnos de que ya haya un modelo entrenado
+        if getattr(self, 'modelo_kmeans', None) is None:
+            return False, "Primero debes entrenar el algoritmo K-Means."
+            
+        try:
+            # 2. Preparamos la imagen de prueba (Query Image)
+            img_np = np.array(imagen_pil.convert('RGB'))
+            alto, ancho, _ = img_np.shape
+            
+            # Aplanamos los píxeles
+            pixeles_planos = img_np.reshape(-1, 3)
+            
+            # 3. LA PREDICCIÓN: K-Means clasifica cada píxel en su grupo más cercano
+            etiquetas = self.modelo_kmeans.predict(pixeles_planos)
+            
+            # 4. Convertimos los centroides a colores RGB enteros (0-255)
+            centroides_enteros = np.round(self.centroides).astype(np.uint8)
+            
+            # 5. Pintamos cada píxel con el color exacto de su centroide
+            pixeles_segmentados = centroides_enteros[etiquetas]
+            
+            # 6. Reconstruimos el arreglo a la forma original de la foto (Alto x Ancho)
+            imagen_final_np = pixeles_segmentados.reshape(alto, ancho, 3)
+            
+            return True, imagen_final_np
+            
+        except Exception as e:
+            return False, f"Error en la segmentación: {e}"

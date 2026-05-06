@@ -1,0 +1,1 @@
+#089e71" if len(self.regiones_clases) == 0 else "#8b14df"

@@ -35,6 +35,9 @@ class Presentador:
         self.vista.btn_franjas.configure(command=self.accion_elegir_franjas)
         self.vista.btn_generar.configure(command=self.accion_generar_puntos)
         self.vista.btn_evaluar.configure(command=self.accion_evaluar)
+        self.vista.btn_cargar_dataset.configure(command=self.accion_cargar_dataset)
+        self.vista.btn_entrenar_kmeans.configure(command=self.accion_entrenar_kmeans)
+        self.vista.btn_segmentar_kmeans.configure(command=self.accion_segmentar_kmeans)
 
         if hasattr(self.vista, 'btn_perceptron'):
             self.vista.btn_perceptron.configure(command=self.accion_perceptron)
@@ -368,7 +371,7 @@ class Presentador:
         popup.geometry('350x300')
         popup.grab_set()
 
-        # AHORA PEDIMOS 3 NÚMEROS (w_x, w_y, w0)
+        
         ctk.CTkLabel(popup, text='Pesos iniciales (w_x, w_y, w0):', font=ctk.CTkFont(weight="bold")).pack(pady=(20, 5))
         entry_pesos = ctk.CTkEntry(popup, width=200, justify="center")
         entry_pesos.insert(0, "1, 1, 1")
@@ -376,7 +379,7 @@ class Presentador:
 
         ctk.CTkLabel(popup, text='Tasa de Aprendizaje (r):', font=ctk.CTkFont(weight="bold")).pack(pady=(15, 5))
         entry_tasa = ctk.CTkEntry(popup, width=100, justify="center")
-        entry_tasa.insert(0, "0.1") # Sugiero usar 0.1 por defecto
+        entry_tasa.insert(0, "0.1") 
         entry_tasa.pack(pady=5)
 
         def entrenar():
@@ -397,7 +400,7 @@ class Presentador:
             ctk.CTkLabel(popup_wait, text="Calculando línea divisoria...").pack(pady=20)
             self.vista.update()
 
-            # LLAMAMOS AL NUEVO MODELO XY
+            
             exito, resultado = self.modelo.entrenar_perceptron_xy(w_iniciales_xy, bias_inicial, tasa)
             
             popup_wait.destroy()
@@ -405,7 +408,7 @@ class Presentador:
             if exito:
                 pesos_f, bias_f, epocas = resultado
                 
-                # ¡MAGIA! Dibujamos la recta sin alterar la imagen original ni los puntos
+                
                 self.vista.dibujar_linea_division(pesos_f[0], pesos_f[1], bias_f, self.img_width, self.img_height)
                 
                 texto_resultados = (f" Éxito Espacial en {epocas} épocas\n"
@@ -449,6 +452,113 @@ class Presentador:
         
         doc.add_paragraph("Gráfica de barras - Eficiencia por Clase:")
         doc.add_picture(memfile, width=Inches(5.5))       
+
+    def accion_cargar_dataset(self):
+        # 1. Pedirle al usuario la carpeta
+        ruta_carpeta = self.vista.pedir_directorio()
+        
+        if not ruta_carpeta: # Si el usuario cierra la ventana sin elegir nada
+            return 
+            
+        # 2. Mostrar ventana de espera (importante para que el usuario no crea que se trabó)
+        popup_wait = ctk.CTkToplevel(self.vista)
+        popup_wait.title("Procesando...")
+        popup_wait.geometry("350x120")
+        popup_wait.grab_set()
+        ctk.CTkLabel(popup_wait, text="Extrayendo descriptores del Dataset...\nEsto puede tardar unos segundos.", font=ctk.CTkFont(weight="bold")).pack(pady=30)
+        self.vista.update()
+
+        # 3. Llamar al Modelo para hacer el trabajo pesado
+        # Le pedimos 1000 descriptores (píxeles) por imagen
+        exito, resultado, imagenes_leidas = self.modelo.cargar_dataset_masivo(ruta_carpeta, num_descriptores=1000)
+        
+        # Cerramos la ventana de espera
+        popup_wait.destroy()
+
+        if exito:
+            # 4. Guardamos el mega arreglo en el main para usarlo después en K-Means
+            self.dataset_entrenamiento = resultado 
+            
+            # 5. Mostramos los datos de éxito
+            forma = resultado.shape # Esto nos da (Total_Puntos, 3 colores RGB)
+            total_puntos = forma[0]
+            
+            mensaje = (f"✅ Dataset cargado con éxito.\n\n"
+                       f"Imágenes procesadas: {imagenes_leidas}\n"
+                       f"Total de píxeles extraídos: {total_puntos:,}\n\n"
+                       f"El arreglo tiene forma: {forma}")
+            
+            self.vista.mostrar_alerta("Dataset Listo", mensaje)
+        else:
+            self.vista.mostrar_error("Error", resultado)
+
+
+    def accion_entrenar_kmeans(self):
+        # 1. Verificar si ya tenemos un dataset cargado
+        if not hasattr(self, 'dataset_entrenamiento') or self.dataset_entrenamiento is None:
+            self.vista.mostrar_error("Error", "Primero debes cargar el Dataset.")
+            return
+
+        # 2. Leer la "K" que introdujo el usuario
+        try:
+            k_elegida = int(self.vista.entry_k.get())
+            if k_elegida <= 0: raise ValueError
+        except:
+            self.vista.mostrar_error("Error", "La K debe ser un número entero positivo.")
+            return
+
+        # 3. Ventana de espera (K-Means es pesado)
+        popup_wait = ctk.CTkToplevel(self.vista)
+        popup_wait.title("Entrenando...")
+        popup_wait.geometry("350x120")
+        popup_wait.grab_set()
+        ctk.CTkLabel(popup_wait, text=f"Entrenando K-Means con K={k_elegida}...\nBuscando los colores principales.", font=ctk.CTkFont(weight="bold")).pack(pady=30)
+        self.vista.update()
+
+        # 4. Mandamos llamar al modelo
+        exito, resultado = self.modelo.entrenar_kmeans(self.dataset_entrenamiento, k_elegida)
+        
+        popup_wait.destroy()
+
+        if exito:
+            # Si tiene éxito, 'resultado' contiene los Centroides (los colores RGB que encontró)
+            # Los redondeamos para que no tengan decimales infinitos
+            centroides_limpios = np.round(resultado).astype(int)
+            
+            mensaje = f"✅ Entrenamiento Finalizado.\n\nSe encontraron {k_elegida} colores dominantes (Centroides RGB):\n\n"
+            for i, color in enumerate(centroides_limpios):
+                mensaje += f"Clase {i+1}: R:{color[0]} G:{color[1]} B:{color[2]}\n"
+                
+            self.vista.mostrar_alerta("K-Means Entrenado", mensaje)
+        else:
+            self.vista.mostrar_error("Error", resultado)         
+
+    def accion_segmentar_kmeans(self):
+        if self.img_pil is None:
+            self.vista.mostrar_error("Error", "Primero debes Subir una Imagen (Query Image).")
+            return
+            
+        # Ventana de espera
+        popup_wait = ctk.CTkToplevel(self.vista)
+        popup_wait.title("Segmentando...")
+        popup_wait.geometry("300x120")
+        popup_wait.grab_set()
+        ctk.CTkLabel(popup_wait, text="Aplicando K-Means a la imagen...\nPintando con los Centroides.", font=ctk.CTkFont(weight="bold")).pack(pady=30)
+        self.vista.update()
+
+        # Llamamos al modelo
+        exito, resultado = self.modelo.segmentar_con_kmeans(self.img_pil)
+        
+        popup_wait.destroy()
+
+        if exito:
+            # Convertimos el arreglo Numpy a imagen de nuevo
+            img_final = Image.fromarray(resultado)
+            # Mostramos el resultado
+            self.vista.mostrar_resultado_kmeans(img_final)
+        else:
+            self.vista.mostrar_error("Error", resultado)
+
 
 if __name__ == "__main__":
     app_vista = VistaPrincipal()
