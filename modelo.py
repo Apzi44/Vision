@@ -64,7 +64,9 @@ class ClasificadorModelo:
             self.modelo_kmeans = kmeans
             self.centroides = kmeans.cluster_centers_
 
-            return True, self.centroides
+            iteraciones = kmeans.n_iter_
+
+            return True, (self.centroides, iteraciones)
         except Exception as e:
             return False, f"Error de entrenamiento: {e}"
 
@@ -226,6 +228,42 @@ class ClasificadorModelo:
         suma_filas[suma_filas == 0] = 1 
         eficiencia_por_clase = (np.diag(matriz_confusion) / suma_filas) * 100
 
+
+    def obtener_limites_clases(self, imagen_pil):
+        if getattr(self, 'modelo_kmeans', None) is None:
+            return False, "Primero debes entrenar el algoritmo K-Means."
+            
+        try:
+            
+            img_np = np.array(imagen_pil.convert('RGB'))
+            h, w, _ = img_np.shape
+            
+            
+            pixeles_planos = img_np.reshape(-1, 3)
+            etiquetas = self.modelo_kmeans.predict(pixeles_planos)
+            
+            
+            mapa_clases = etiquetas.reshape(h, w)
+            
+            lista_boxes = []
+            
+            for k in range(self.modelo_kmeans.n_clusters):
+                
+                indices = np.argwhere(mapa_clases == k)
+                
+                if len(indices) > 0:
+                    
+                    min_y, min_x = indices.min(axis=0)
+                    max_y, max_x = indices.max(axis=0)
+                    
+                    lista_boxes.append((int(min_x), int(min_y), int(max_x), int(max_y)))
+                else:
+                    lista_boxes.append(None)
+            
+            return True, lista_boxes
+            
+        except Exception as e:
+            return False, f"Error calculando encuadres: {e}"
     
     def entrenar_perceptron_xy(self, w_iniciales_xy, bias_inicial, r, max_epocas=5000):
         if self.num_clases != 2:
@@ -269,7 +307,28 @@ class ClasificadorModelo:
                 return True, (pesos_limpios, bias_limpio, epoca + 1)
                 
         return False, "El Perceptrón no convergió. Intenta cuadros sin empalme." 
-                
+
+    def clasificar_puntos_especificos(self, imagen_pil, eje_x, eje_y):
+        if getattr(self, 'modelo_kmeans', None) is None:
+            return False, "Primero debes entrenar el algoritmo K-Means."
+            
+        try:
+            img_np = np.array(imagen_pil.convert('RGB'))
+            
+            # Extraemos los colores exactos de las coordenadas que nos mandó la interfaz
+            colores_extraidos = img_np[eje_y, eje_x]
+            
+            # K-Means predice la clase (OUT)
+            etiquetas = self.modelo_kmeans.predict(colores_extraidos)
+            
+            # Contamos cuántos cayeron en cada bote
+            conteos = np.bincount(etiquetas, minlength=self.modelo_kmeans.n_clusters)
+            
+            return True, (etiquetas, conteos)
+            
+        except Exception as e:
+            return False, f"Error clasificando puntos: {e}"        
+
     def segmentar_con_kmeans(self, imagen_pil):
         
         if getattr(self, 'modelo_kmeans', None) is None:

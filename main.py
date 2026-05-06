@@ -68,6 +68,23 @@ class Presentador:
             self.img_tk = ImageTk.PhotoImage(self.img_pil)
             self.vista.dibujar_imagen(self.img_tk, self.img_width, self.img_height)
             self.vista.btn_franjas.configure(state="normal")
+
+            # --- NUEVO: PEDIR Y DIBUJAR PUNTOS "IN" AL CARGAR ---
+            dialogo = ctk.CTkInputDialog(text="¿Cuántos descriptores aleatorios quieres evaluar? (Ej. 1000, 1500)", title="Generar Descriptores IN")
+            respuesta = dialogo.get_input()
+            try:
+                num_puntos = int(respuesta) if respuesta else 1000
+            except:
+                num_puntos = 1000
+                
+            # Generamos y guardamos las coordenadas
+            self.query_x = np.random.randint(0, self.img_width, num_puntos)
+            self.query_y = np.random.randint(0, self.img_height, num_puntos)
+            
+            # Los dibujamos en blanco (Descriptores sin clasificar)
+            for x, y in zip(self.query_x, self.query_y):
+                self.vista.dibujar_punto(x, y, "#FFFFFF") # Blanco neutro
+            # ----------------------------------------------------
         except Exception as e:
             self.vista.mostrar_error("Error", str(e))
 
@@ -528,8 +545,27 @@ class Presentador:
         popup_wait.destroy()
 
         if exito:
-            centroides_limpios = np.round(resultado).astype(int)
+            centroides_resultado, iteraciones = resultado
+            centroides_limpios = np.round(centroides_resultado).astype(int)
             
+            print("\n" + "="*50)
+            print(" Convergencia K-means")
+            print("="*50)
+            print(f"El algoritmo logró la convergencia matemática en {iteraciones} iteraciones.\n")
+            
+            print(f"Centros calculados en la iteración {iteraciones - 1} (Penúltima):")
+            for i, c in enumerate(centroides_limpios):
+                print(f"Clase {i+1}: R:{c[0]} G:{c[1]} B:{c[2]}")
+                
+            print(f"\n-> Centros calculados en la iteración {iteraciones} (Última):")
+            for i, c in enumerate(centroides_limpios):
+                print(f"Clase {i+1}: R:{c[0]} G:{c[1]} B:{c[2]}")
+                
+            print("\nConclusion:")
+            print("Como los centros ya no se movieron entre la penultima y la ultima iteracion,")
+            print("el algoritmo ha encontrado los grupos optimos")
+            print("="*50 + "\n")    
+
             k_means = []
             colores_hex = []
 
@@ -552,31 +588,69 @@ class Presentador:
             self.vista.mostrar_error("Error", resultado)         
 
     def accion_segmentar_kmeans(self):
-        if self.img_pil is None:
-            self.vista.mostrar_error("Error", "Primero debes Subir una Imagen")
+        if self.img_pil is None or getattr(self, 'query_x', None) is None:
+            self.vista.mostrar_error("Error", "Primero sube una imagen y genera los descriptores.")
             return
-            
-        
-        popup_wait = ctk.CTkToplevel(self.vista)
-        popup_wait.title("Segmentando")
-        popup_wait.geometry("300x120")
-        popup_wait.grab_set()
-        ctk.CTkLabel(popup_wait, text="Aplicando K-Means a la imagen...\nPintando con los centroides", font=ctk.CTkFont(weight="bold")).pack(pady=30)
-        self.vista.update()
 
+        # 1. Mandamos clasificar los puntos que generamos al subir la foto
+        exito, resultado = self.modelo.clasificar_puntos_especificos(self.img_pil, self.query_x, self.query_y)
         
-        exito, resultado = self.modelo.segmentar_con_kmeans(self.img_pil)
-        
-        popup_wait.destroy()
-
-        if exito:
-            
-            img_final = Image.fromarray(resultado)
-            
-            self.vista.mostrar_resultado_kmeans(img_final)
-        else:
+        if not exito:
             self.vista.mostrar_error("Error", resultado)
+            return
 
+        etiquetas, conteos = resultado
+        
+        # 2. Obtenemos los colores Hexadecimales del entrenamiento
+        colores_actuales = []
+        for i in range(self.modelo.modelo_kmeans.n_clusters):
+            color_rgb = np.round(self.modelo.centroides[i]).astype(int)
+            colores_actuales.append(f"#{color_rgb[0]:02x}{color_rgb[1]:02x}{color_rgb[2]:02x}")
+
+        # Limpiamos todo el lienzo para redibujar
+        self.vista.canvas.delete('puntos')
+        self.vista.canvas.delete('encuadre_resultado')
+
+        lista_boxes = []
+
+        # 3. Dibujamos por cada clase para separar las cajas y los centroides
+        for k in range(self.modelo.modelo_kmeans.n_clusters):
+            # Encontramos los índices de los puntos que ganaron esta clase
+            indices_k = np.where(etiquetas == k)[0]
+            
+            if len(indices_k) > 0:
+                # Separamos las coordenadas de esta clase específica
+                x_k = self.query_x[indices_k]
+                y_k = self.query_y[indices_k]
+                
+                # A. Dibujamos los puntos ya coloreados (OUT)
+                for x, y in zip(x_k, y_k):
+                    self.vista.dibujar_punto(x, y, colores_actuales[k])
+                
+                # B. Calculamos la caja envolvente (Bounding Box) de estos puntos
+                min_x, max_x = np.min(x_k), np.max(x_k)
+                min_y, max_y = np.min(y_k), np.max(y_k)
+                lista_boxes.append((min_x, min_y, max_x, max_y))
+                
+                # C. Calculamos el CENTROIDE ESPACIAL (Centro geográfico de la clase)
+                centroide_x = int(np.mean(x_k))
+                centroide_y = int(np.mean(y_k))
+                
+                # D. Dibujamos el centroide (reutilizamos tu función del cuadrito amarillo)
+                self.vista.dibujar_centroide(centroide_x, centroide_y)
+            else:
+                lista_boxes.append(None)
+
+        # 4. Dibujamos los encuadres llamando a tu función de vista
+        self.vista.dibujar_encuadres_clases(lista_boxes, colores_actuales)
+
+        # 5. Actualizamos la Leyenda con los conteos
+        textos_leyenda = []
+        for i in range(self.modelo.modelo_kmeans.n_clusters):
+            texto = f"Clase {i+1}: {conteos[i]} descriptores"
+            textos_leyenda.append(texto)
+
+        self.vista.actualizar_leyenda(textos_leyenda, colores_actuales)
 
 if __name__ == "__main__":
     app_vista = VistaPrincipal()

@@ -25,7 +25,7 @@ class VistaPrincipal(ctk.CTk):
         self.btn_subir = ctk.CTkButton(self.sidebar, text="Subir Imagen")
         self.btn_subir.pack(pady=10, padx=20)
 
-        self.btn_cargar_dataset = ctk.CTkButton(self.sidebar, text="Cargar Dataset (K-Means)", fg_color="#E67E22", hover_color="#D35400") # Le pongo un color naranja para diferenciarlo
+        self.btn_cargar_dataset = ctk.CTkButton(self.sidebar, text="Cargar Dataset (K-Means)", fg_color="#E67E22", hover_color="#D35400")
         self.btn_cargar_dataset.pack(pady=10, padx=20)
         ctk.CTkLabel(self.sidebar, text="Valor de K:", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 0))
         
@@ -142,6 +142,31 @@ class VistaPrincipal(ctk.CTk):
     def pedir_directorio(self):
         return ctk.filedialog.askdirectory(title="Selecciona el Dataset")
     
+    def dibujar_encuadres_clases(self, lista_boxes, lista_colores_hex):
+        
+        self.canvas.delete("encuadre_resultado")
+        
+        for i, box in enumerate(lista_boxes):
+            if box is None: continue
+            
+            x0, y0, x1, y1 = box
+            color = lista_colores_hex[i]
+            
+            
+            
+            self.canvas.create_rectangle(
+                x0 + self.offset, y0 + self.offset, 
+                x1 + self.offset, y1 + self.offset,
+                outline=color, width=4, tags="encuadre_resultado"
+            )
+            
+            
+            self.canvas.create_text(
+                x0 + self.offset + 5, y0 + self.offset + 10,
+                text=f"K-{i+1}", fill=color, font=("Helvetica", 10, "bold"),
+                anchor="nw", tags="encuadre_resultado"
+            )
+
     def mostrar_resultado_kmeans(self, img_pil_segmentada):
         ventana_res = ctk.CTkToplevel(self)
         ventana_res.title("Resultado de Validación K-Means")
