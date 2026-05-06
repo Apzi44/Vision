@@ -30,7 +30,7 @@ class VistaPrincipal(ctk.CTk):
         ctk.CTkLabel(self.sidebar, text="Valor de K:", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 0))
         
         self.entry_k = ctk.CTkEntry(self.sidebar, justify="center", width=80)
-        self.entry_k.insert(0, "3") # Por defecto sugerimos 3 (cielo, vegetación, agua)
+        self.entry_k.insert(0, "3") 
         self.entry_k.pack(pady=5)
 
         self.btn_entrenar_kmeans = ctk.CTkButton(self.sidebar, text="Entrenar K-Means", fg_color="#27AE60", hover_color="#1E8449")
@@ -145,11 +145,11 @@ class VistaPrincipal(ctk.CTk):
     def mostrar_resultado_kmeans(self, img_pil_segmentada):
         ventana_res = ctk.CTkToplevel(self)
         ventana_res.title("Resultado de Validación K-Means")
-        # Hacemos la ventana un poco más grande que la imagen
+        
         ventana_res.geometry(f"{img_pil_segmentada.width + 40}x{img_pil_segmentada.height + 40}")
         ventana_res.grab_set()
         
-        # Convertimos la imagen para que se vea nítida
+        
         img_tk = ctk.CTkImage(light_image=img_pil_segmentada, dark_image=img_pil_segmentada, size=(img_pil_segmentada.width, img_pil_segmentada.height))
         
         lbl_img = ctk.CTkLabel(ventana_res, image=img_tk, text="")

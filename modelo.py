@@ -17,7 +17,7 @@ class ClasificadorModelo:
         mega_dataset = []
         imagenes_leidas = 0
         
-        # 1. Explorar todos los archivos en la carpeta que le pasemos
+        
         for archivo in os.listdir(ruta_carpeta):
             ext = os.path.splitext(archivo)[1].lower()
             
@@ -25,33 +25,33 @@ class ClasificadorModelo:
                 ruta_completa = os.path.join(ruta_carpeta, archivo)
                 
                 try:
-                    # 2. Abrir la imagen y asegurar que esté en formato RGB
+                    
                     img = Image.open(ruta_completa).convert('RGB')
                     img_np = np.array(img)
                     
-                    # 3. Aplanar la imagen: pasar de 3D (Alto, Ancho, RGB) a una lista 2D (Total Pixeles, RGB)
+                    
                     pixeles_planos = img_np.reshape(-1, 3)
                     total_pixeles = pixeles_planos.shape[0]
                     
-                    # 4. Elegir puntos al azar (Si la imagen es muy chiquita, tomamos lo que se pueda)
+                    
                     puntos_a_extraer = min(num_descriptores, total_pixeles)
                     
-                    # Generamos índices aleatorios sin repetición
+                    
                     indices_aleatorios = np.random.choice(total_pixeles, puntos_a_extraer, replace=False)
                     
-                    # 5. Extraemos solo los píxeles (descriptores) de esos índices
+                    
                     descriptores = pixeles_planos[indices_aleatorios]
                     
-                    # 6. Los guardamos en la lista gigante
+                    
                     mega_dataset.append(descriptores)
                     imagenes_leidas += 1
                     
                 except Exception as e:
                     print(f"Error al leer la imagen {archivo}: {e}")
                     
-        # 7. Unir todas las mini-listas en un solo mega arreglo de Numpy
+        
         if len(mega_dataset) > 0:
-            # vstack apila los arreglos uno encima de otro
+            
             dataset_final = np.vstack(mega_dataset)
             return True, dataset_final, imagenes_leidas
         else:
@@ -271,28 +271,28 @@ class ClasificadorModelo:
         return False, "El Perceptrón no convergió. Intenta cuadros sin empalme." 
                 
     def segmentar_con_kmeans(self, imagen_pil):
-        # 1. Asegurarnos de que ya haya un modelo entrenado
+        
         if getattr(self, 'modelo_kmeans', None) is None:
             return False, "Primero debes entrenar el algoritmo K-Means."
             
         try:
-            # 2. Preparamos la imagen de prueba (Query Image)
+            
             img_np = np.array(imagen_pil.convert('RGB'))
             alto, ancho, _ = img_np.shape
             
-            # Aplanamos los píxeles
+            
             pixeles_planos = img_np.reshape(-1, 3)
             
-            # 3. LA PREDICCIÓN: K-Means clasifica cada píxel en su grupo más cercano
+            
             etiquetas = self.modelo_kmeans.predict(pixeles_planos)
             
-            # 4. Convertimos los centroides a colores RGB enteros (0-255)
+            
             centroides_enteros = np.round(self.centroides).astype(np.uint8)
             
-            # 5. Pintamos cada píxel con el color exacto de su centroide
+            
             pixeles_segmentados = centroides_enteros[etiquetas]
             
-            # 6. Reconstruimos el arreglo a la forma original de la foto (Alto x Ancho)
+            
             imagen_final_np = pixeles_segmentados.reshape(alto, ancho, 3)
             
             return True, imagen_final_np
