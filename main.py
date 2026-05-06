@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import filedialog
 from PIL import Image, ImageTk
 import numpy as np
+import os
 
 class Presentador:
     def __init__(self, vista: VistaPrincipal, modelo: ClasificadorModelo):
@@ -47,7 +48,13 @@ class Presentador:
         self.vista.canvas.bind("<ButtonRelease-1>", self.finalizar_rectangulo)
 
     def accion_subir_imagen(self):
-        filename = filedialog.askopenfilename(title="Selecciona imagen", filetypes=(("Imágenes", "*.png *.jpg *.jpeg"), ("Todos", "*.*")))
+
+        ruta_imagen = os.path.join(os.getcwd(), "Imagenes prueba")
+
+        if not os.path.exists(ruta_imagen):
+            ruta_imagen = "/"
+
+        filename = filedialog.askopenfilename(initialdir = ruta_imagen,title="Selecciona imagen", filetypes=(("Imágenes", "*.png *.jpg *.jpeg"), ("Todos", "*.*")))
         if not filename: return
         
         try:
@@ -521,15 +528,26 @@ class Presentador:
         popup_wait.destroy()
 
         if exito:
-            
-            
             centroides_limpios = np.round(resultado).astype(int)
             
+            k_means = []
+            colores_hex = []
+
             mensaje = f" Entrenamiento Finalizado.\n\nSe encontraron {k_elegida} colores dominantes (Centroides RGB):\n\n"
             for i, color in enumerate(centroides_limpios):
-                mensaje += f"Clase {i+1}: R:{color[0]} G:{color[1]} B:{color[2]}\n"
-                
+                r = max(0, min(255, color[0]))
+                g = max(0, min(255, color[1]))
+                b = max(0, min(255, color[2]))
+
+                color_hex = f"#{r:02x}{g:02x}{b:02x}"
+                mensaje += f"Clase {i+1}: R:{r} G:{g} B:{b}\n"
+
+                k_means.append(f"K-{i+1}")
+                colores_hex.append(color_hex)
+
             self.vista.mostrar_alerta("K-Means Entrenado", mensaje)
+
+            self.vista.actualizar_leyenda(k_means, colores_hex)
         else:
             self.vista.mostrar_error("Error", resultado)         
 
