@@ -59,6 +59,8 @@ class VistaPrincipal(ctk.CTk):
         self.btn_perceptron = ctk.CTkButton(self.sidebar, text = "Entrenar Perceptron", state = "disabled", fg_color = "#8e44ad", hover_color = "#732d91")
         self.btn_perceptron.pack(pady = 10, padx = 20)
 
+        self.btn_semilla = ctk.CTkButton(self.sidebar, text = "Crecimiento de Semilla", fg_color = "#E74C3C", hover_color = "#C0392B")
+        self.btn_semilla.pack(pady = 10, padx = 20)
 
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=20, pady=20)

@@ -10,6 +10,8 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 import numpy as np
 import os
+import pyttsx3
+import matplotlib.colors as mcolors
 
 class Presentador:
     def __init__(self, vista: VistaPrincipal, modelo: ClasificadorModelo):
@@ -27,6 +29,9 @@ class Presentador:
         self.rect_start_x = None
         self.rect_start_y = None
         self.rect_id = None
+        self.modo_semilla = False
+        self.en_proceso_expansion = False
+        self.modelo.iniciar_escucha_hilo(self.gestionar_aplauso)
 
         self._conectar_eventos()
 
@@ -39,6 +44,8 @@ class Presentador:
         self.vista.btn_cargar_dataset.configure(command=self.accion_cargar_dataset)
         self.vista.btn_entrenar_kmeans.configure(command=self.accion_entrenar_kmeans)
         self.vista.btn_segmentar_kmeans.configure(command=self.accion_segmentar_kmeans)
+        self.vista.btn_semilla.configure(command=self.accion_activar_semilla)
+        
 
         if hasattr(self.vista, 'btn_perceptron'):
             self.vista.btn_perceptron.configure(command=self.accion_perceptron)
@@ -70,20 +77,20 @@ class Presentador:
             self.vista.btn_franjas.configure(state="normal")
 
             # --- NUEVO: PEDIR Y DIBUJAR PUNTOS "IN" AL CARGAR ---
-            dialogo = ctk.CTkInputDialog(text="¿Cuántos descriptores aleatorios quieres evaluar? (Ej. 1000, 1500)", title="Generar Descriptores IN")
-            respuesta = dialogo.get_input()
-            try:
-                num_puntos = int(respuesta) if respuesta else 1000
-            except:
-                num_puntos = 1000
+            # dialogo = ctk.CTkInputDialog(text="¿Cuántos descriptores aleatorios quieres evaluar? (Ej. 1000, 1500)", title="Generar Descriptores IN")
+            #respuesta = dialogo.get_input()
+            #try:
+            #    num_puntos = int(respuesta) if respuesta else 1000
+            #except:
+            #    num_puntos = 1000
                 
             # Generamos y guardamos las coordenadas
-            self.query_x = np.random.randint(0, self.img_width, num_puntos)
-            self.query_y = np.random.randint(0, self.img_height, num_puntos)
+            #self.query_x = np.random.randint(0, self.img_width, num_puntos)
+            #self.query_y = np.random.randint(0, self.img_height, num_puntos)
             
             # Los dibujamos en blanco (Descriptores sin clasificar)
-            for x, y in zip(self.query_x, self.query_y):
-                self.vista.dibujar_punto(x, y, "#FFFFFF") # Blanco neutro
+            #for x, y in zip(self.query_x, self.query_y):
+            #    self.vista.dibujar_punto(x, y, "#FFFFFF") # Blanco neutro
             # ----------------------------------------------------
         except Exception as e:
             self.vista.mostrar_error("Error", str(e))
@@ -95,6 +102,10 @@ class Presentador:
         self.vista.mostrar_alerta("Modo Selección", "1. Encierra una zona limpia para la clase 1")
 
     def iniciar_rectangulo(self, event):
+        if getattr(self, 'modo_semilla', False):
+            self.ejecutar_crecimiento_semilla(event)
+            return
+        
         if not self.modo_seleccion: return
         self.rect_start_x = event.x
         self.rect_start_y = event.y
@@ -651,6 +662,112 @@ class Presentador:
             textos_leyenda.append(texto)
 
         self.vista.actualizar_leyenda(textos_leyenda, colores_actuales)
+
+    def accion_activar_semilla(self):
+        if self.img_pil is None:
+            self.vista.mostrar_error("Error", "Sube una imagen primero.")
+            return
+        self.modo_semilla = True
+        self.vista.mostrar_alerta("Modo Semilla", "Haz clic izquierdo en cualquier color de la foto para iniciar la expansión.")
+
+    def ejecutar_crecimiento_semilla(self, event):
+        # 1. Ajustamos las coordenadas del clic restando el margen (offset) de tu diseño
+        x = int(event.x - self.vista.offset)
+        y = int(event.y - self.vista.offset)
+
+        # 2. Verificamos que el usuario no haya hecho clic fuera de la foto
+        if x < 0 or x >= self.img_width or y < 0 or y >= self.img_height:
+            return
+
+        self.vista.mostrar_alerta("Calculando...", "Propagando semilla, por favor espera un momento.")
+        self.vista.update()
+
+        # 3. Llamamos a tu algoritmo matemático con una tolerancia de 30
+        exito, region = self.modelo.crecimiento_semilla_hsi(self.img_pil, x, y, tolerancia=0.05)
+
+        if exito:
+            # 4. Clonamos la imagen a Numpy para pintarla súper rápido
+            img_np = np.array(self.img_pil.convert('RGB'))
+            
+            # 5. Pintamos de Verde Fosforescente cada píxel "contagiado"
+            for px, py in region:
+                img_np[py, px] = [0, 255, 0] # R=0, G=255, B=0
+                
+            # 6. Convertimos de vuelta a imagen y la mostramos
+            img_infectada_pil = Image.fromarray(img_np)
+            self.img_tk_infectada = ImageTk.PhotoImage(img_infectada_pil)
+            self.vista.dibujar_imagen(self.img_tk_infectada, self.img_width, self.img_height)
+            
+            self.vista.mostrar_alerta("Infección Terminada", f"Se expandió la región.\nTotal de píxeles: {len(region)}")
+            
+        # Apagamos el modo para que no siga pintando por accidente
+        self.modo_semilla = False   
+
+    def gestionar_aplauso(self):
+        """Esta función se ejecuta automáticamente cuando detecta un aplauso."""
+        if not self.en_proceso_expansion:
+            print("¡Aplauso detectado! Modo semilla ACTIVADO.")
+            self.modo_semilla = True
+            self.en_proceso_expansion = True
+            # Aquí podrías mandar un mensaje visual a la vista
+        else:
+            print("¡Aplauso detectado! Deteniendo expansión.")
+            self.modo_semilla = False
+            self.en_proceso_expansion = False
+
+    def decir_escena(self, texto):
+        """Configura el sintetizador y dice el texto en voz alta."""
+        engine = pyttsx3.init()
+        # Opcional: configurar voz en español
+        voices = engine.getProperty('voices')
+        for voice in voices:
+            if "spanish" in voice.name.lower():
+                engine.setProperty('voice', voice.id)
+                break
+        engine.say(texto)
+        engine.runAndWait()
+
+    def ejecutar_crecimiento_semilla(self, event):
+        x = int(event.x - self.vista.offset)
+        y = int(event.y - self.vista.offset)
+
+        if x < 0 or x >= self.img_width or y < 0 or y >= self.img_height:
+            return
+
+        # Obtenemos el color HSI de la semilla para deducir qué es
+        img_hsv = mcolors.rgb_to_hsv(np.array(self.img_pil.convert('RGB')) / 255.0)
+        h, s, v = img_hsv[y, x]
+        
+        # --- LÓGICA DE ENTENDIMIENTO (Deducción por Matiz/Hue) ---
+        # Los rangos de Hue van de 0 a 1 (como un círculo de color)
+        etiqueta = "Desconocido"
+        if 0.5 <= h <= 0.7: 
+            etiqueta = "Cielo o Agua" # Tonos azules
+        elif 0.2 <= h <= 0.45:
+            etiqueta = "Vegetación"   # Tonos verdes
+        elif 0.05 <= h <= 0.15:
+            etiqueta = "Arena o Rocas" # Tonos amarillos/cafés
+            
+        self.vista.mostrar_alerta("Procesando", f"Detectando región de tipo: {etiqueta}")
+        self.vista.update()
+
+        # Ejecutamos la expansión Pro (Hue + Saturation)
+        exito, region = self.modelo.crecimiento_semilla_hsi_pro(self.img_pil, x, y)
+
+        if exito:
+            # (Pintamos la región en verde como ya lo hacíamos...)
+            img_np = np.array(self.img_pil.convert('RGB'))
+            for px, py in region:
+                img_np[py, px] = [0, 255, 0]
+            
+            self.img_tk_infectada = ImageTk.PhotoImage(Image.fromarray(img_np))
+            self.vista.dibujar_imagen(self.img_tk_infectada, self.img_width, self.img_height)
+            
+            # --- ¡VOZ! El Megáfono del pizarrón ---
+            mensaje_voz = f"He identificado una región de {etiqueta} con {len(region)} píxeles."
+            self.decir_escena(mensaje_voz)
+            
+        self.modo_semilla = False
 
 if __name__ == "__main__":
     app_vista = VistaPrincipal()
