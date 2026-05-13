@@ -31,7 +31,8 @@ class Presentador:
         self.rect_id = None
         self.modo_semilla = False
         self.en_proceso_expansion = False
-        self.modelo.iniciar_escucha_hilo(self.gestionar_aplauso)
+        # Comentar aqui si es necesario
+        # self.modelo.iniciar_escucha_hilo(self.gestionar_aplauso)
 
         self._conectar_eventos()
 
@@ -76,7 +77,7 @@ class Presentador:
             self.vista.dibujar_imagen(self.img_tk, self.img_width, self.img_height)
             self.vista.btn_franjas.configure(state="normal")
 
-            # --- NUEVO: PEDIR Y DIBUJAR PUNTOS "IN" AL CARGAR ---
+            
             # dialogo = ctk.CTkInputDialog(text="¿Cuántos descriptores aleatorios quieres evaluar? (Ej. 1000, 1500)", title="Generar Descriptores IN")
             #respuesta = dialogo.get_input()
             #try:
@@ -84,14 +85,14 @@ class Presentador:
             #except:
             #    num_puntos = 1000
                 
-            # Generamos y guardamos las coordenadas
+            
             #self.query_x = np.random.randint(0, self.img_width, num_puntos)
             #self.query_y = np.random.randint(0, self.img_height, num_puntos)
             
-            # Los dibujamos en blanco (Descriptores sin clasificar)
+            
             #for x, y in zip(self.query_x, self.query_y):
             #    self.vista.dibujar_punto(x, y, "#FFFFFF") # Blanco neutro
-            # ----------------------------------------------------
+            
         except Exception as e:
             self.vista.mostrar_error("Error", str(e))
 
@@ -603,7 +604,7 @@ class Presentador:
             self.vista.mostrar_error("Error", "Primero sube una imagen y genera los descriptores.")
             return
 
-        # 1. Mandamos clasificar los puntos que generamos al subir la foto
+        
         exito, resultado = self.modelo.clasificar_puntos_especificos(self.img_pil, self.query_x, self.query_y)
         
         if not exito:
@@ -612,50 +613,50 @@ class Presentador:
 
         etiquetas, conteos = resultado
         
-        # 2. Obtenemos los colores Hexadecimales del entrenamiento
+        
         colores_actuales = []
         for i in range(self.modelo.modelo_kmeans.n_clusters):
             color_rgb = np.round(self.modelo.centroides[i]).astype(int)
             colores_actuales.append(f"#{color_rgb[0]:02x}{color_rgb[1]:02x}{color_rgb[2]:02x}")
 
-        # Limpiamos todo el lienzo para redibujar
+        
         self.vista.canvas.delete('puntos')
         self.vista.canvas.delete('encuadre_resultado')
 
         lista_boxes = []
 
-        # 3. Dibujamos por cada clase para separar las cajas y los centroides
+        
         for k in range(self.modelo.modelo_kmeans.n_clusters):
-            # Encontramos los índices de los puntos que ganaron esta clase
+            
             indices_k = np.where(etiquetas == k)[0]
             
             if len(indices_k) > 0:
-                # Separamos las coordenadas de esta clase específica
+                
                 x_k = self.query_x[indices_k]
                 y_k = self.query_y[indices_k]
                 
-                # A. Dibujamos los puntos ya coloreados (OUT)
+                
                 for x, y in zip(x_k, y_k):
                     self.vista.dibujar_punto(x, y, colores_actuales[k])
                 
-                # B. Calculamos la caja envolvente (Bounding Box) de estos puntos
+                
                 min_x, max_x = np.min(x_k), np.max(x_k)
                 min_y, max_y = np.min(y_k), np.max(y_k)
                 lista_boxes.append((min_x, min_y, max_x, max_y))
                 
-                # C. Calculamos el CENTROIDE ESPACIAL (Centro geográfico de la clase)
+                
                 centroide_x = int(np.mean(x_k))
                 centroide_y = int(np.mean(y_k))
                 
-                # D. Dibujamos el centroide (reutilizamos tu función del cuadrito amarillo)
+                
                 self.vista.dibujar_centroide(centroide_x, centroide_y)
             else:
                 lista_boxes.append(None)
 
-        # 4. Dibujamos los encuadres llamando a tu función de vista
+        
         self.vista.dibujar_encuadres_clases(lista_boxes, colores_actuales)
 
-        # 5. Actualizamos la Leyenda con los conteos
+        
         textos_leyenda = []
         for i in range(self.modelo.modelo_kmeans.n_clusters):
             texto = f"Clase {i+1}: {conteos[i]} descriptores"
@@ -671,36 +672,36 @@ class Presentador:
         self.vista.mostrar_alerta("Modo Semilla", "Haz clic izquierdo en cualquier color de la foto para iniciar la expansión.")
 
     def ejecutar_crecimiento_semilla(self, event):
-        # 1. Ajustamos las coordenadas del clic restando el margen (offset) de tu diseño
+        
         x = int(event.x - self.vista.offset)
         y = int(event.y - self.vista.offset)
 
-        # 2. Verificamos que el usuario no haya hecho clic fuera de la foto
+        
         if x < 0 or x >= self.img_width or y < 0 or y >= self.img_height:
             return
 
         self.vista.mostrar_alerta("Calculando...", "Propagando semilla, por favor espera un momento.")
         self.vista.update()
 
-        # 3. Llamamos a tu algoritmo matemático con una tolerancia de 30
+        
         exito, region = self.modelo.crecimiento_semilla_hsi(self.img_pil, x, y, tolerancia=0.05)
 
         if exito:
-            # 4. Clonamos la imagen a Numpy para pintarla súper rápido
+            
             img_np = np.array(self.img_pil.convert('RGB'))
             
-            # 5. Pintamos de Verde Fosforescente cada píxel "contagiado"
+            
             for px, py in region:
-                img_np[py, px] = [0, 255, 0] # R=0, G=255, B=0
+                img_np[py, px] = [0, 255, 0] 
                 
-            # 6. Convertimos de vuelta a imagen y la mostramos
+            
             img_infectada_pil = Image.fromarray(img_np)
             self.img_tk_infectada = ImageTk.PhotoImage(img_infectada_pil)
             self.vista.dibujar_imagen(self.img_tk_infectada, self.img_width, self.img_height)
             
             self.vista.mostrar_alerta("Infección Terminada", f"Se expandió la región.\nTotal de píxeles: {len(region)}")
             
-        # Apagamos el modo para que no siga pintando por accidente
+        
         self.modo_semilla = False   
 
     def gestionar_aplauso(self):
@@ -709,16 +710,28 @@ class Presentador:
             print("¡Aplauso detectado! Modo semilla ACTIVADO.")
             self.modo_semilla = True
             self.en_proceso_expansion = True
-            # Aquí podrías mandar un mensaje visual a la vista
+            
+            
+            
+            
+            self.vista.canvas.after(0, lambda: self.vista.mostrar_alerta(
+                "¡Aplauso Escuchado!", 
+                "El micrófono te ha escuchado.\nHaz clic en cualquier color de la foto para iniciar la infección."
+            ))
         else:
             print("¡Aplauso detectado! Deteniendo expansión.")
             self.modo_semilla = False
             self.en_proceso_expansion = False
+            
+            self.vista.canvas.after(0, lambda: self.vista.mostrar_alerta(
+                "Cancelado", 
+                "Se apagó el modo semilla por sonido."
+            ))
 
     def decir_escena(self, texto):
         """Configura el sintetizador y dice el texto en voz alta."""
         engine = pyttsx3.init()
-        # Opcional: configurar voz en español
+        
         voices = engine.getProperty('voices')
         for voice in voices:
             if "spanish" in voice.name.lower():
@@ -734,28 +747,28 @@ class Presentador:
         if x < 0 or x >= self.img_width or y < 0 or y >= self.img_height:
             return
 
-        # Obtenemos el color HSI de la semilla para deducir qué es
+        
         img_hsv = mcolors.rgb_to_hsv(np.array(self.img_pil.convert('RGB')) / 255.0)
         h, s, v = img_hsv[y, x]
         
-        # --- LÓGICA DE ENTENDIMIENTO (Deducción por Matiz/Hue) ---
-        # Los rangos de Hue van de 0 a 1 (como un círculo de color)
+        
+        
         etiqueta = "Desconocido"
         if 0.5 <= h <= 0.7: 
-            etiqueta = "Cielo o Agua" # Tonos azules
+            etiqueta = "Cielo o Agua" 
         elif 0.2 <= h <= 0.45:
-            etiqueta = "Vegetación"   # Tonos verdes
+            etiqueta = "Vegetación"   
         elif 0.05 <= h <= 0.15:
-            etiqueta = "Arena o Rocas" # Tonos amarillos/cafés
+            etiqueta = "Arena o Rocas" 
             
         self.vista.mostrar_alerta("Procesando", f"Detectando región de tipo: {etiqueta}")
         self.vista.update()
 
-        # Ejecutamos la expansión Pro (Hue + Saturation)
+        
         exito, region = self.modelo.crecimiento_semilla_hsi_pro(self.img_pil, x, y)
 
         if exito:
-            # (Pintamos la región en verde como ya lo hacíamos...)
+            
             img_np = np.array(self.img_pil.convert('RGB'))
             for px, py in region:
                 img_np[py, px] = [0, 255, 0]
@@ -763,8 +776,8 @@ class Presentador:
             self.img_tk_infectada = ImageTk.PhotoImage(Image.fromarray(img_np))
             self.vista.dibujar_imagen(self.img_tk_infectada, self.img_width, self.img_height)
             
-            # --- ¡VOZ! El Megáfono del pizarrón ---
-            mensaje_voz = f"He identificado una región de {etiqueta} con {len(region)} píxeles."
+            
+            mensaje_voz = f"Se ha encontrado un area de {etiqueta} con {len(region)} píxeles."
             self.decir_escena(mensaje_voz)
             
         self.modo_semilla = False

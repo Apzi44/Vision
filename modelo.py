@@ -320,13 +320,13 @@ class ClasificadorModelo:
         try:
             img_np = np.array(imagen_pil.convert('RGB'))
             
-            # Extraemos los colores exactos de las coordenadas que nos mandó la interfaz
+            
             colores_extraidos = img_np[eje_y, eje_x]
             
-            # K-Means predice la clase (OUT)
+            
             etiquetas = self.modelo_kmeans.predict(colores_extraidos)
             
-            # Contamos cuántos cayeron en cada bote
+            
             conteos = np.bincount(etiquetas, minlength=self.modelo_kmeans.n_clusters)
             
             return True, (etiquetas, conteos)
@@ -365,74 +365,74 @@ class ClasificadorModelo:
             return False, f"Error en la segmentación: {e}"
         
 
-       # -------------------------------------------------------------
-    # NUEVOS MÉTODOS PARA CRECIMIENTO DE SEMILLA (REGION GROWING)
-    # -------------------------------------------------------------
+       
+    
+    
     def crecimiento_semilla_matematico(self, imagen_pil, semilla_x, semilla_y, tolerancia=30.0):
-        # 1. Preparamos la imagen
+        
         img_np = np.array(imagen_pil.convert('RGB'), dtype=float)
         h, w, _ = img_np.shape
         
-        # 2. Creamos un mapa "vacío" de Falsos para saber qué píxeles ya visitamos
+        
         visitados = np.zeros((h, w), dtype=bool)
         
-        # 3. Extraemos el color exacto de nuestra Semilla original
+        
         color_semilla = img_np[semilla_y, semilla_x]
         
-        # 4. Inicializamos la "Lista de espera" y la lista final de nuestra región
+        
         puntos_por_revisar = deque([(semilla_x, semilla_y)])
         visitados[semilla_y, semilla_x] = True
         
         region_expandida = [(semilla_x, semilla_y)]
         
-        # 5. Las coordenadas de los 8 vecinos (exactamente como las flechas del pizarrón)
-        # (dx, dy): Izquierda, Derecha, Arriba, Abajo y las 4 diagonales
+        
+        
         vecinos_8 = [
             (-1, 0), (1, 0), (0, -1), (0, 1),
             (-1, -1), (1, -1), (-1, 1), (1, 1)
         ]
         
-        # 6. ¡COMIENZA LA INFECCIÓN!
+        
         while puntos_por_revisar:
-            # Sacamos el primer píxel de la fila
+            
             cx, cy = puntos_por_revisar.popleft()
             
-            # Revisamos sus 8 vecinos
+            
             for dx, dy in vecinos_8:
                 nx = cx + dx
                 ny = cy + dy
                 
-                # Verificamos que el vecino no se salga de los bordes de la foto
+                
                 if 0 <= nx < w and 0 <= ny < h:
-                    # Si aún no lo hemos visitado ni contagiado...
+                    
                     if not visitados[ny, nx]:
-                        visitados[ny, nx] = True # Lo marcamos para no ciclar el programa
+                        visitados[ny, nx] = True 
                         
-                        # Extraemos el color del vecino
+                        
                         color_actual = img_np[ny, nx]
                         
-                        # Calculamos qué tan diferente es del color de la semilla original
-                        # (Usamos Distancia Euclidiana en 3D: Raíz de la suma de diferencias al cuadrado)
+                        
+                        
                         distancia_color = np.linalg.norm(color_actual - color_semilla)
                         
-                        # Si se parecen mucho (la distancia es menor a la tolerancia permitida)
+                        
                         if distancia_color <= tolerancia:
-                            # ¡Lo contagiamos!
+                            
                             puntos_por_revisar.append((nx, ny))
                             region_expandida.append((nx, ny))
                             
-        # Devolvemos la lista con todos los (x, y) que forman la nueva región
+        
         return True, region_expandida 
     
     def crecimiento_semilla_hsi_pro(self, imagen_pil, semilla_x, semilla_y, tolerancia=0.05, saturacion=0.15):
-        # 1. Convertimos la imagen de RGB a HSV (que es el estándar en Python para HSI)
+        
         img_rgb = np.array(imagen_pil.convert('RGB')) / 255.0
-        img_hsv = mcolors.rgb_to_hsv(img_rgb) # Ahora tenemos [Hue, Saturation, Value]
+        img_hsv = mcolors.rgb_to_hsv(img_rgb) 
         
         h, w, _ = img_hsv.shape
         visitados = np.zeros((h, w), dtype=bool)
         
-        # 2. Nuestra referencia ahora es el HUE (Matiz) de la semilla
+        
         hue_semilla = img_hsv[semilla_y, semilla_x, 0]
         sat_semilla = img_hsv[semilla_y, semilla_x, 1]
         
@@ -451,17 +451,17 @@ class ClasificadorModelo:
                 if 0 <= nx < w and 0 <= ny < h and not visitados[ny, nx]:
                     visitados[ny, nx] = True
                     
-                    # 3. Comparamos solo el canal HUE
+                    
                     hue_actual = img_hsv[ny, nx, 0]
                     sat_actual = img_hsv[ny, nx, 1]
                     
-                    # La diferencia de matiz es más sensible (va de 0 a 1)
+                    
                     distancia_hue = abs(hue_actual - hue_semilla)
                     if distancia_hue > 0.5: distancia_hue = 1.0 - distancia_hue
 
                     distancia_sat = abs(sat_actual - sat_semilla)
 
-                    # Si el color es "el mismo" matiz, no importa si está oscuro
+                    
                     if distancia_hue <= tolerancia and distancia_sat <= saturacion:
                         puntos_por_revisar.append((nx, ny))
                         region_expandida.append((nx, ny))
@@ -474,24 +474,24 @@ class ClasificadorModelo:
         self.hilo_audio = threading.Thread(target=self._monitorear_microfono, args=(callback_aplauso,), daemon=True)
         self.hilo_audio.start()
 
-    def _monitorear_microfono(self, callback_aplauso, umbral=0.85): # Ajusta este umbral si sigue muy sensible
-        """Analiza el micrófono buscando picos repentinos (aplausos) con anti-spam."""
-        self.ultimo_aplauso = 0  # Control de enfriamiento (cooldown)
+    def _monitorear_microfono(self, callback_aplauso, umbral=1.2): 
+        
+        self.ultimo_aplauso = 0  
 
         def audio_callback(indata, frames, tiempo, status):
-            # Un aplauso es un pico agudo, usamos max(abs()) para encontrar ese pico exacto
-            pico_volumen = np.max(np.abs(indata))
+            
+            pico_volumen = np.max(np.abs(indata)) * 1000
+            
+            print(f"Ruido amplificado: {pico_volumen:.3f}") 
             
             tiempo_actual = time.time()
             
-            # Si el pico supera el umbral Y ha pasado más de 1 segundo desde el último aplauso
+            
             if pico_volumen > umbral and (tiempo_actual - self.ultimo_aplauso) > 1.5:
                 self.ultimo_aplauso = tiempo_actual
                 callback_aplauso()
 
         try:
-            # blocksize=2048 hace que escuche en bloques pequeños, ideal para captar
-            # chasquidos rápidos como los aplausos sin que se diluyan.
             with sd.InputStream(callback=audio_callback, channels=1, blocksize=2048):
                 while self.escuchando:
                     sd.sleep(100)
